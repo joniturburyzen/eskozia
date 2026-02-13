@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificador de Rutas Turísticas - Portugal</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .form-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 1.1em;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .stop-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .stop-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .map-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .results-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .results-title {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .activities-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .activity-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s;
+        }
+
+        .activity-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .activity-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .activity-card p {
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .restaurant-card {
+            border-left-color: #f093fb;
+        }
+
+        .restaurant-card h3 {
+            color: #f093fb;
+        }
+
+        .distance-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .distance-info h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .distance-info p {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        footer {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .activities-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗺️ Planificador de Rutas Turísticas</h1>
+            <p class="subtitle">Descubre Portugal con paradas culturales y gastronómicas</p>
+        </header>
+
+        <div class="main-content">
+            <div class="form-section">
+                <div class="form-group">
+                    <label for="startPoint">📍 Punto de Salida</label>
+                    <select id="startPoint">
+                        <option value="">Selecciona una ciudad...</option>
+                        <option value="lisboa">Lisboa</option>
+                        <option value="porto">Oporto</option>
+                        <option value="faro">Faro</option>
+                        <option value="coimbra">Coimbra</option>
+                        <option value="braga">Braga</option>
+                        <option value="evora">Évora</option>
+                        <option value="aveiro">Aveiro</option>
+                        <option value="setubal">Setúbal</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="endPoint">🎯 Punto de Llegada</label>
+                    <select id="endPoint">
+                        <option value="">Selecciona una ciudad...</option>
+                        <option value="lisboa">Lisboa</option>
+                        <option value="porto">Oporto</option>
+                        <option value="faro">Faro</option>
+                        <option value="coimbra">Coimbra</option>
+                        <option value="braga">Braga</option>
+                        <option value="evora">Évora</option>
+                        <option value="aveiro">Aveiro</option>
+                        <option value="setubal">Setúbal</option>
+                    </select>
+                </div>
+
+                <div class="stop-container" id="stopsContainer" style="display: none;">
+                    <div class="stop-title">🚗 Paradas Recomendadas</div>
+                    <div class="form-group">
+                        <label for="stop1">Primera Parada</label>
+                        <select id="stop1">
+                            <option value="">Selecciona una parada...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="stop2">Segunda Parada</label>
+                        <select id="stop2">
+                            <option value="">Selecciona una parada...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="stop3">Tercera Parada</label>
+                        <select id="stop3">
+                            <option value="">Selecciona una parada...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn" id="planRouteBtn">🚀 Planificar Ruta</button>
+                <button class="btn" id="showResultsBtn" style="display: none;">📊 Ver Resultados</button>
+            </div>
+
+            <div class="map-section">
+                <h2 style="color: #667eea; margin-bottom: 20px;">🗺️ Mapa de la Ruta</h2>
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <h2 class="results-title">✨ Recomendaciones para tu Viaje</h2>
+            
+            <div class="distance-info" id="distanceInfo">
+                <h3>📏 Información de Distancias</h3>
+                <p id="totalDistance">Calculando distancias...</p>
+            </div>
+
+            <h3 style="color: #667eea; margin: 30px 0 15px 0;">🎭 Actividades Culturales</h3>
+            <div class="activities-grid" id="culturalActivities">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <h3 style="color: #f093fb; margin: 30px 0 15px 0; margin-top: 40px;">🍽️ Restaurantes Recomendados</h3>
+            <div class="activities-grid" id="restaurants">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <h3 style="color: #667eea; margin: 30px 0 15px 0; margin-top: 40px;">🎪 Ocio y Entretenimiento</h3>
+            <div class="activities-grid" id="entertainment">
+                <!-- Se llenará dinámicamente -->
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2026 Planificador de Rutas Turísticas de Portugal | Tu guía perfecta para explorar Portugal</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <script>
+        // Base de datos de ciudades con coordenadas
+        const cities = {
+            lisboa: { name: "Lisboa", lat: 38.7223, lng: -9.1393 },
+            porto: { name: "Oporto", lat: 41.1579, lng: -8.6291 },
+            faro: { name: "Faro", lat: 37.0193, lng: -7.9304 },
+            coimbra: { name: "Coimbra", lat: 40.2033, lng: -8.4103 },
+            braga: { name: "Braga", lat: 41.5454, lng: -8.4265 },
+            evora: { name: "Évora", lat: 38.5715, lng: -7.9093 },
+            aveiro: { name: "Aveiro", lat: 40.6405, lng: -8.6537 },
+            setubal: { name: "Setúbal", lat: 38.5243, lng: -8.8926 },
+            sintra: { name: "Sintra", lat: 38.7987, lng: -9.3883 },
+            cascais: { name: "Cascais", lat: 38.7031, lng: -9.4233 },
+            obidos: { name: "Óbidos", lat: 39.3583, lng: -9.1569 },
+            nazare: { name: "Nazaré", lat: 39.6053, lng: -9.0722 },
+            fatima: { name: "Fátima", lat: 39.6250, lng: -8.6667 },
+            tomar: { name: "Tomar", lat: 39.6000, lng: -8.4086 },
+            guimaraes: { name: "Guimarães", lat: 41.4450, lng: -8.2900 }
+        };
+
+        // Base de datos de actividades por ciudad
+        const activities = {
+            lisboa: {
+                cultural: [
+                    { name: "Torre de Belém", description: "Monumento histórico Patrimonio de la Humanidad", category: "monumento" },
+                    { name: "Monasterio de los Jerónimos", description: "Arquitectura manuelina impresionante", category: "monumento" },
+                    { name: "Castillo de San Jorge", description: "Vistas panorámicas de la ciudad", category: "castillo" }
+                ],
+                restaurants: [
+                    { name: "Cervejaria Ramiro", description: "Mariscos frescos y famosos", price: "€€€", cuisine: "mariscos" },
+                    { name: "Time Out Market", description: "Mercado gastronómico con múltiples opciones", price: "€€", cuisine: "variado" },
+                    { name: "Belcanto", description: "Restaurante con estrellas Michelin", price: "€€€€", cuisine: "portuguesa" }
+                ],
+                entertainment: [
+                    { name: "Tranvía 28", description: "Recorrido histórico por la ciudad", type: "transporte" },
+                    { name: "Fado en Alfama", description: "Música tradicional portuguesa", type: "música" },
+                    { name: "Oceanario de Lisboa", description: "Uno de los mayores acuarios de Europa", type: "familia" }
+                ]
+            },
+            porto: {
+                cultural: [
+                    { name: "Torre de los Clérigos", description: "Símbolo de la ciudad con vistas espectaculares", category: "monumento" },
+                    { name: "Catedral de Oporto", description: "Arquitectura románica y gótica", category: "religioso" },
+                    { name: "Livraria Lello", description: "Librería histórica inspiración de Harry Potter", category: "literatura" }
+                ],
+                restaurants: [
+                    { name: "Cantinho do Avillez", description: "Cocina portuguesa moderna", price: "€€€", cuisine: "portuguesa" },
+                    { name: "Majestic Café", description: "Café histórico art nouveau", price: "€€", cuisine: "café" },
+                    { name: "DOP", description: "Alta cocina en palacio histórico", price: "€€€€", cuisine: "gourmet" }
+                ],
+                entertainment: [
+                    { name: "Crucero por el Duero", description: "Paseo en barco con vistas de las bodegas", type: "crucero" },
+                    { name: "Bodegas de Oporto", description: "Degustación de vinos de Oporto", type: "vino" },
+                    { name: "Palacio de la Bolsa", description: "Arquitectura neoclásica impresionante", type: "monumento" }
+                ]
+            },
+            coimbra: {
+                cultural: [
+                    { name: "Universidad de Coimbra", description: "Una de las más antiguas del mundo", category: "educación" },
+                    { name: "Biblioteca Joanina", description: "Biblioteca barroca espectacular", category: "biblioteca" },
+                    { name: "Catedral Nueva", description: "Arquitectura renacentista", category: "religioso" }
+                ],
+                restaurants: [
+                    { name: "Zé Manel dos Ossos", description: "Cocina tradicional portuguesa", price: "€€", cuisine: "portuguesa" },
+                    { name: "À Capa", description: "Restaurante moderno con vistas", price: "€€€", cuisine: "contemporánea" },
+                    { name: "Pastel de Santa Clara", description: "Postres tradicionales", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Serenatas en la Universidad", description: "Música tradicional de estudiantes", type: "música" },
+                    { name: "Jardín Botánico", description: "Espacio verde histórico", type: "naturaleza" },
+                    { name: "Monasterio de Santa Clara", description: "Arquitectura gótica", type: "monumento" }
+                ]
+            },
+            braga: {
+                cultural: [
+                    { name: "Santuario del Bom Jesús", description: "Escaleras barrocas y vistas impresionantes", category: "religioso" },
+                    { name: "Catedral de Braga", description: "La más antigua de Portugal", category: "religioso" },
+                    { name: "Castillo de Braga", description: "Ruinas históricas en el centro", category: "castillo" }
+                ],
+                restaurants: [
+                    { name: "Taberna Belga", description: "Cocina tradicional minhota", price: "€€", cuisine: "regional" },
+                    { name: "Sílvia & Céu", description: "Restaurante familiar auténtico", price: "€€", cuisine: "portuguesa" },
+                    { name: "Restaurante São Sebastião", description: "Cocina gourmet local", price: "€€€", cuisine: "gourmet" }
+                ],
+                entertainment: [
+                    { name: "Elevador del Bom Jesús", description: "Ascensor histórico panorámico", type: "transporte" },
+                    { name: "Parque de la Ponte", description: "Zona verde junto al río", type: "naturaleza" },
+                    { name: "Festival de São João", description: "Celebración tradicional (junio)", type: "festival" }
+                ]
+            },
+            aveiro: {
+                cultural: [
+                    { name: "Moliceiro Ride", description: "Paseo en barco tradicional", category: "experiencia" },
+                    { name: "Museo de Aveiro", description: "Arte sacro y azulejos", category: "museo" },
+                    { name: "Canal de Aveiro", description: "Venecia portuguesa", category: "arquitectura" }
+                ],
+                restaurants: [
+                    { name: "O Caminho das Areias", description: "Mariscos frescos del canal", price: "€€", cuisine: "mariscos" },
+                    { name: "Restaurante Costa Nova", description: "Cocina del mar tradicional", price: "€€€", cuisine: "pescado" },
+                    { name: "Ovos Moles", description: "Dulces tradicionales de Aveiro", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Playa de Costa Nova", description: "Casas rayadas y arena dorada", type: "playa" },
+                    { name: "Paseo en bicicleta", description: "Rutas por la costa", type: "actividad" },
+                    { name: "Mercado de la Pesca", description: "Mercado tradicional animado", type: "mercado" }
+                ]
+            },
+            faro: {
+                cultural: [
+                    { name: "Catedral de Faro", description: "Arquitectura variada histórica", category: "religioso" },
+                    { name: "Museo Arqueológico", description: "Historia romana y portuguesa", category: "museo" },
+                    { name: "Arco de la Puerta del Mar", description: "Entrada histórica a la ciudad", category: "monumento" }
+                ],
+                restaurants: [
+                    { name: "Restaurante O Castelo", description: "Vistas al castillo y cocina algarvia", price: "€€€", cuisine: "algarvia" },
+                    { name: "Marisqueira Faro", description: "Mariscos frescos del Atlántico", price: "€€", cuisine: "mariscos" },
+                    { name: "Adega Nova", description: "Tasca tradicional portuguesa", price: "€€", cuisine: "tapas" }
+                ],
+                entertainment: [
+                    { name: "Islas de Ría Formosa", description: "Parque natural y playas vírgenes", type: "naturaleza" },
+                    { name: "Playa de Faro", description: "Arena dorada y aguas cristalinas", type: "playa" },
+                    { name: "Paseo marítimo", description: "Promenade junto al océano", type: "paseo" }
+                ]
+            },
+            evora: {
+                cultural: [
+                    { name: "Templo Romano", description: "Ruinas romanas impresionantes", category: "romano" },
+                    { name: "Capilla de los Huesos", description: "Capilla única con decoración ósea", category: "religioso" },
+                    { name: "Catedral de Évora", description: "Arquitectura gótica monumental", category: "religioso" }
+                ],
+                restaurants: [
+                    { name: "Fialho", description: "Restaurante histórico desde 1961", price: "€€€", cuisine: "alentejana" },
+                    { name: "Tasquinha do Oliveira", description: "Cocina tradicional alentejana", price: "€€", cuisine: "regional" },
+                    { name: "Taberna de Portalegre", description: "Vinos y tapas locales", price: "€€", cuisine: "tapas" }
+                ],
+                entertainment: [
+                    { name: "Plaza del Giraldo", description: "Corazón histórico de la ciudad", type: "plaza" },
+                    { name: "Museo de Évora", description: "Arte y arqueología regional", type: "museo" },
+                    { name: "Rutas del vino del Alentejo", description: "Degustación de vinos locales", type: "vino" }
+                ]
+            },
+            setubal: {
+                cultural: [
+                    { name: "Castillo de San Felipe", description: "Fortaleza histórica con vistas", category: "castillo" },
+                    { name: "Convento de Jesús", description: "Arquitectura manuelina", category: "religioso" },
+                    { name: "Mercado del Puerto", description: "Mercado tradicional animado", category: "mercado" }
+                ],
+                restaurants: [
+                    { name: "Restaurante Ramiro", description: "Mariscos frescos del Sado", price: "€€€", cuisine: "mariscos" },
+                    { name: "Marisqueira do Pescador", description: "Especialidades del día", price: "€€", cuisine: "pescado" },
+                    { name: "Tasquinha do Carlos", description: "Cocina casera tradicional", price: "€€", cuisine: "portuguesa" }
+                ],
+                entertainment: [
+                    { name: "Playa de Galápos", description: "Arena dorada cerca de la ciudad", type: "playa" },
+                    { name: "Observación de delfines", description: "Excursiones en el estuario del Sado", type: "naturaleza" },
+                    { name: "Parque Natural de Arrábida", description: "Acantilados y playas escondidas", type: "naturaleza" }
+                ]
+            },
+            sintra: {
+                cultural: [
+                    { name: "Palacio Nacional de Sintra", description: "Palacio romántico con chimeneas cónicas", category: "palacio" },
+                    { name: "Quinta da Regaleira", description: "Jardines místicos y pozos iniciáticos", category: "jardín" },
+                    { name: "Castillo de los Moros", description: "Ruinas medievales con vistas", category: "castillo" }
+                ],
+                restaurants: [
+                    { name: "Tascantiga", description: "Tasca tradicional con ambiente", price: "€€", cuisine: "portuguesa" },
+                    { name: "Inate", description: "Cocina contemporánea creativa", price: "€€€", cuisine: "fusion" },
+                    { name: "Pastel de Sintra", description: "Pasteles tradicionales locales", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Paseo en tren turístico", description: "Recorrido por los palacios", type: "transporte" },
+                    { name: "Jardines de Monserrate", description: "Jardines botánicos exóticos", type: "naturaleza" },
+                    { name: "Cabo da Roca", description: "Punto más occidental de Europa", type: "naturaleza" }
+                ]
+            },
+            obidos: {
+                cultural: [
+                    { name: "Castillo de Óbidos", description: "Castillo medieval amurallado", category: "castillo" },
+                    { name: "Iglesia de Santa María", description: "Iglesia gótica dentro del castillo", category: "religioso" },
+                    { name: "Murallas de Óbidos", description: "Paseo por las murallas medievales", category: "arquitectura" }
+                ],
+                restaurants: [
+                    { name: "Restaurante do Castelo", description: "Comida dentro del castillo", price: "€€€", cuisine: "portuguesa" },
+                    { name: "Tasquinha do Celso", description: "Cocina tradicional en ambiente rústico", price: "€€", cuisine: "regional" },
+                    { name: "Ginjinha de Óbidos", description: "Licor tradicional en chocolate", price: "€", cuisine: "bebidas" }
+                ],
+                entertainment: [
+                    { name: "Festival Medieval", description: "Celebración histórica (julio-agosto)", type: "festival" },
+                    { name: "Paseo por las calles empedradas", description: "Explorar el pueblo medieval", type: "paseo" },
+                    { name: "Tiendas de artesanía", description: "Comprar productos locales", type: "compras" }
+                ]
+            },
+            nazare: {
+                cultural: [
+                    { name: "Santuario de Nuestra Señora de Nazaré", description: "Santuario religioso importante", category: "religioso" },
+                    { name: "Forte de São Miguel Arcanjo", description: "Fuerte histórico con vistas", category: "fortaleza" },
+                    { name: "Museo Dr. Joaquim Manso", description: "Historia y cultura local", category: "museo" }
+                ],
+                restaurants: [
+                    { name: "Restaurante A Tasquinha", description: "Pescado fresco y sardinas", price: "€€", cuisine: "pescado" },
+                    { name: "O Celeiro", description: "Mariscos y vistas al mar", price: "€€€", cuisine: "mariscos" },
+                    { name: "Pastel de Tentúgal", description: "Pasteles tradicionales", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Playa de Nazaré", description: "Famosa por las olas gigantes", type: "surf" },
+                    { name: "Paseo en teleférico", description: "Vistas panorámicas del acantilado", type: "transporte" },
+                    { name: "Mercado del pescado", description: "Subastas y productos frescos", type: "mercado" }
+                ]
+            },
+            fatima: {
+                cultural: [
+                    { name: "Santuario de Fátima", description: "Centro de peregrinación mundial", category: "religioso" },
+                    { name: "Capilla de las Apariciones", description: "Lugar de las apariciones marianas", category: "religioso" },
+                    { name: "Basilica de la Santísima Trinidad", description: "Arquitectura moderna monumental", category: "religioso" }
+                ],
+                restaurants: [
+                    { name: "Restaurante do Santuário", description: "Comida cerca del santuario", price: "€€", cuisine: "portuguesa" },
+                    { name: "Adega do Povo", description: "Cocina tradicional beirense", price: "€€", cuisine: "regional" },
+                    { name: "Pastel de Fátima", description: "Pasteles locales", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Vela de las Velas", description: "Ceremonia religiosa nocturna", type: "religioso" },
+                    { name: "Museo del Santuario", description: "Historia de las apariciones", type: "museo" },
+                    { name: "Paseo por los jardines", description: "Espacios verdes del santuario", type: "naturaleza" }
+                ]
+            },
+            tomar: {
+                cultural: [
+                    { name: "Convento de Cristo", description: "Patrimonio de la Humanidad templario", category: "religioso" },
+                    { name: "Castillo de Tomar", description: "Fortaleza templaria histórica", category: "castillo" },
+                    { name: "Sinagoga de Tomar", description: "Única sinagoga medieval de Portugal", category: "religioso" }
+                ],
+                restaurants: [
+                    { name: "Restaurante Sabores do Tempo", description: "Cocina tradicional con historia", price: "€€", cuisine: "portuguesa" },
+                    { name: "Taberna do Zé", description: "Tasca familiar auténtica", price: "€€", cuisine: "regional" },
+                    { name: "Pastel de Tomar", description: "Dulce tradicional local", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Jardín de las Ninfas", description: "Jardines renacentistas del convento", type: "naturaleza" },
+                    { name: "Río Nabão", description: "Paseo junto al río", type: "naturaleza" },
+                    { name: "Mercado Municipal", description: "Productos locales y artesanía", type: "mercado" }
+                ]
+            },
+            guimaraes: {
+                cultural: [
+                    { name: "Castillo de Guimarães", description: "Cuna de Portugal histórico", category: "castillo" },
+                    { name: "Palacio de los Duques", description: "Palacio gótico monumental", category: "palacio" },
+                    { name: "Centro Histórico", description: "Patrimonio de la Humanidad UNESCO", category: "histórico" }
+                ],
+                restaurants: [
+                    { name: "Restaurante Santiago", description: "Cocina tradicional minhota", price: "€€", cuisine: "regional" },
+                    { name: "Cantinho dos Sabores", description: "Platos típicos locales", price: "€€", cuisine: "portuguesa" },
+                    { name: "Pastel de Guimarães", description: "Dulce tradicional", price: "€", cuisine: "postres" }
+                ],
+                entertainment: [
+                    { name: "Plaza de Oliveira", description: "Corazón histórico de la ciudad", type: "plaza" },
+                    { name: "Teleférico de Guimarães", description: "Vistas panorámicas", type: "transporte" },
+                    { name: "Festival de Gil Vicente", description: "Teatro tradicional (mayo)", type: "festival" }
+                ]
+            }
+        };
+
+        // Ciudades que quedan entre rutas principales
+        const routeStops = {
+            "lisboa-porto": ["coimbra", "aveiro", "guimaraes"],
+            "porto-lisboa": ["guimaraes", "braga", "coimbra"],
+            "lisboa-faro": ["setubal", "evora"],
+            "faro-lisboa": ["evora", "setubal"],
+            "porto-faro": ["coimbra", "lisboa", "setubal"],
+            "faro-porto": ["setubal", "lisboa", "coimbra"],
+            "lisboa-coimbra": ["obidos", "nazare"],
+            "coimbra-lisboa": ["fatima", "tomar"],
+            "porto-braga": ["guimaraes"],
+            "braga-porto": ["guimaraes"],
+            "lisboa-evora": ["setubal"],
+            "evora-lisboa": ["montemor"],
+            "lisboa-aveiro": ["coimbra"],
+            "aveiro-lisboa": ["coimbra"],
+            "porto-aveiro": ["coimbra"],
+            "aveiro-porto": ["coimbra"]
+        };
+
+        let map;
+        let routingControl;
+        let markers = [];
+        let selectedStops = [];
+
+        // Inicializar el mapa
+        function initMap() {
+            map = L.map('map').setView([39.5, -8.0], 7);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Calcular y mostrar la ruta
+        function calculateRoute() {
+            const startPoint = document.getElementById('startPoint').value;
+            const endPoint = document.getElementById('endPoint').value;
+            
+            if (!startPoint || !endPoint) {
+                alert('Por favor, selecciona punto de salida y llegada');
+                return;
+            }
+
+            if (startPoint === endPoint) {
+                alert('El punto de salida y llegada no pueden ser el mismo');
+                return;
+            }
+
+            // Limpiar mapa anterior
+            if (routingControl) {
+                routingControl.remove();
+            }
+            markers.forEach(marker => marker.remove());
+            markers = [];
+
+            // Obtener coordenadas
+            const startCoords = cities[startPoint];
+            const endCoords = cities[endPoint];
+
+            // Agregar marcadores
+            const startMarker = L.marker([startCoords.lat, startCoords.lng])
+                .addTo(map)
+                .bindPopup(`<b>Inicio:</b> ${startCoords.name}`);
+            markers.push(startMarker);
+
+            const endMarker = L.marker([endCoords.lat, endCoords.lng])
+                .addTo(map)
+                .bindPopup(`<b>Destino:</b> ${endCoords.name}`);
+            markers.push(endMarker);
+
+            // Obtener paradas recomendadas
+            const routeKey = `${startPoint}-${endPoint}`;
+            const recommendedStops = routeStops[routeKey] || [];
+            
+            // Mostrar contenedor de paradas
+            document.getElementById('stopsContainer').style.display = 'block';
+            document.getElementById('showResultsBtn').style.display = 'block';
+            
+            // Llenar los desplegables con paradas recomendadas
+            fillStopDropdowns(recommendedStops);
+
+            // Centrar el mapa
+            map.fitBounds([
+                [startCoords.lat, startCoords.lng],
+                [endCoords.lat, endCoords.lng]
+            ], { padding: [50, 50] });
+
+            // Calcular ruta con Leaflet Routing Machine
+            calculateFullRoute();
+        }
+
+        // Llenar los desplegables de paradas
+        function fillStopDropdowns(recommendedStops) {
+            const stops = Object.keys(cities).filter(city => 
+                !document.getElementById('startPoint').value.includes(city) && 
+                !document.getElementById('endPoint').value.includes(city)
+            );
+
+            // Llenar primer dropdown
+            const stop1 = document.getElementById('stop1');
+            stop1.innerHTML = '<option value="">Selecciona una parada...</option>';
+            stops.forEach(stop => {
+                const option = document.createElement('option');
+                option.value = stop;
+                option.textContent = cities[stop].name;
+                if (recommendedStops.includes(stop)) {
+                    option.selected = true;
+                }
+                stop1.appendChild(option);
+            });
+
+            // Llenar segundo dropdown
+            const stop2 = document.getElementById('stop2');
+            stop2.innerHTML = '<option value="">Selecciona una parada...</option>';
+            stops.forEach(stop => {
+                const option = document.createElement('option');
+                option.value = stop;
+                option.textContent = cities[stop].name;
+                stop2.appendChild(option);
+            });
+
+            // Llenar tercer dropdown
+            const stop3 = document.getElementById('stop3');
+            stop3.innerHTML = '<option value="">Selecciona una parada...</option>';
+            stops.forEach(stop => {
+                const option = document.createElement('option');
+                option.value = stop;
+                option.textContent = cities[stop].name;
+                stop3.appendChild(option);
+            });
+        }
+
+        // Calcular ruta completa con todas las paradas
+        function calculateFullRoute() {
+            const startPoint = document.getElementById('startPoint').value;
+            const endPoint = document.getElementById('endPoint').value;
+            const stop1 = document.getElementById('stop1').value;
+            const stop2 = document.getElementById('stop2').value;
+            const stop3 = document.getElementById('stop3').value;
+
+            const waypoints = [];
+            waypoints.push(L.latLng(cities[startPoint].lat, cities[startPoint].lng));
+            
+            if (stop1) waypoints.push(L.latLng(cities[stop1].lat, cities[stop1].lng));
+            if (stop2) waypoints.push(L.latLng(cities[stop2].lat, cities[stop2].lng));
+            if (stop3) waypoints.push(L.latLng(cities[stop3].lat, cities[stop3].lng));
+            
+            waypoints.push(L.latLng(cities[endPoint].lat, cities[endPoint].lng));
+
+            // Limpiar ruta anterior
+            if (routingControl) {
+                routingControl.remove();
+            }
+
+            // Crear nueva ruta
+            routingControl = L.Routing.control({
+                waypoints: waypoints,
+                routeWhileDragging: true,
+                showAlternatives: false,
+                addWaypoints: false,
+                fitSelectedRoutes: true,
+                show: false,
+                router: L.Routing.osrmv1({
+                    serviceUrl: 'https://router.project-osrm.org/',
+                    profile: 'car'
+                }),
+                createMarker: function(i, waypoint, n) {
+                    const marker = L.marker(waypoint.latLng, {
+                        draggable: false
+                    });
+                    
+                    let popupContent = '';
+                    if (i === 0) {
+                        popupContent = `<b>Inicio:</b> ${cities[startPoint].name}`;
+                    } else if (i === waypoints.length - 1) {
+                        popupContent = `<b>Destino:</b> ${cities[endPoint].name}`;
+                    } else {
+                        const stopIndex = i - 1;
+                        const stopValue = [stop1, stop2, stop3][stopIndex];
+                        if (stopValue) {
+                            popupContent = `<b>Parada ${stopIndex + 1}:</b> ${cities[stopValue].name}`;
+                        }
+                    }
+                    
+                    marker.bindPopup(popupContent);
+                    return marker;
+                }
+            }).on('routesfound', function(e) {
+                const routes = e.routes;
+                if (routes.length > 0) {
+                    const summary = routes[0].summary;
+                    document.getElementById('totalDistance').textContent = 
+                        `Distancia total: ${Math.round(summary.totalDistance / 1000)} km | ` +
+                        `Tiempo estimado: ${Math.floor(summary.totalTime / 60)} horas ${summary.totalTime % 60} minutos`;
+                }
+            }).addTo(map);
+        }
+
+        // Mostrar resultados con actividades
+        function showResults() {
+            const stop1 = document.getElementById('stop1').value;
+            const stop2 = document.getElementById('stop2').value;
+            const stop3 = document.getElementById('stop3').value;
+
+            selectedStops = [stop1, stop2, stop3].filter(stop => stop);
+
+            // Mostrar sección de resultados
+            document.getElementById('resultsSection').classList.add('active');
+
+            // Mostrar actividades culturales
+            displayActivities('culturalActivities', 'cultural');
+            displayActivities('restaurants', 'restaurants');
+            displayActivities('entertainment', 'entertainment');
+        }
+
+        // Mostrar actividades por tipo
+        function displayActivities(containerId, activityType) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            selectedStops.forEach(stop => {
+                if (activities[stop] && activities[stop][activityType]) {
+                    activities[stop][activityType].forEach(activity => {
+                        const card = document.createElement('div');
+                        card.className = `activity-card ${activityType === 'restaurants' ? 'restaurant-card' : ''}`;
+                        
+                        let content = `<h3>${activity.name}</h3>`;
+                        
+                        if (activityType === 'cultural') {
+                            content += `<p><strong>Tipo:</strong> ${activity.category}</p>`;
+                            content += `<p>${activity.description}</p>`;
+                        } else if (activityType === 'restaurants') {
+                            content += `<p><strong>Cocina:</strong> ${activity.cuisine}</p>`;
+                            content += `<p><strong>Precio:</strong> ${activity.price}</p>`;
+                            content += `<p>${activity.description}</p>`;
+                        } else if (activityType === 'entertainment') {
+                            content += `<p><strong>Tipo:</strong> ${activity.type}</p>`;
+                            content += `<p>${activity.description}</p>`;
+                        }
+                        
+                        content += `<p><strong>📍 Ubicación:</strong> ${cities[stop].name}</p>`;
+                        card.innerHTML = content;
+                        container.appendChild(card);
+                    });
+                }
+            });
+
+            // Si no hay actividades, mostrar mensaje
+            if (container.children.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay actividades disponibles para las paradas seleccionadas.</p>';
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            
+            document.getElementById('planRouteBtn').addEventListener('click', calculateRoute);
+            document.getElementById('showResultsBtn').addEventListener('click', showResults);
+            
+            // Evento para recalcular ruta cuando cambian las paradas
+            document.getElementById('stop1').addEventListener('change', calculateFullRoute);
+            document.getElementById('stop2').addEventListener('change', calculateFullRoute);
+            document.getElementById('stop3').addEventListener('change', calculateFullRoute);
+        });
+    </script>
+</body>
+</html>
