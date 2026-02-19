@@ -12,14 +12,22 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 
 #speech-bubble {
   position: fixed; bottom: 130px; left: 10px; max-width: 260px;
-  background: white; color: #1a2b3d; padding: 12px 16px;
+  background: white; color: #1a2b3d; padding: 12px 16px 12px 16px;
   border-radius: 16px; border-bottom-left-radius: 4px;
   font-size: 0.82rem; line-height: 1.5; font-style: italic;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35); z-index: 900;
   opacity: 0; transform: translateY(8px);
   transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+  cursor: pointer;
 }
-#speech-bubble.visible { opacity: 1; transform: translateY(0); }
+#speech-bubble.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+#speech-bubble.pinned { outline: 2px solid #e87424; }
+#bubble-close {
+  position: absolute; top: 4px; right: 7px;
+  background: none; border: none; font-size: 0.85rem; color: #aaa;
+  cursor: pointer; line-height: 1; padding: 0; display: none;
+}
+#speech-bubble.pinned #bubble-close { display: block; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 #speech-bubble.loading::after { content:' ▌'; animation: blink 0.8s infinite; }
 
@@ -142,7 +150,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 <body>
 
 <div id="map"></div>
-<div id="speech-bubble"></div>
+<div id="speech-bubble"><button id="bubble-close">✕</button></div>
 <button id="diary-btn" title="Diario del día">📓</button>
 
 <div id="panel-info" class="hidden">
@@ -368,15 +376,35 @@ async function askGrok(msg, sys) {
 
 function showBubble(text, ms=6000) {
   const b = document.getElementById('speech-bubble');
-  b.textContent = text; b.classList.remove('loading'); b.classList.add('visible');
+  b.classList.remove('pinned');
+  // Preservar el botón de cierre
+  document.getElementById('bubble-close').textContent = '✕';
+  b.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); });
+  b.insertAdjacentText('beforeend', text);
+  b.classList.remove('loading'); b.classList.add('visible');
   clearTimeout(bubbleTimer);
-  if (ms>0) bubbleTimer = setTimeout(()=>b.classList.remove('visible'), ms);
+  if (ms>0) bubbleTimer = setTimeout(()=>{ if(!b.classList.contains('pinned')) b.classList.remove('visible'); }, ms);
 }
 function showBubbleLoading() {
   const b = document.getElementById('speech-bubble');
-  b.textContent='Hamish está pensando'; b.classList.add('visible','loading');
+  b.classList.remove('pinned');
+  b.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); });
+  b.insertAdjacentText('beforeend', 'Hamish está pensando');
+  b.classList.add('visible','loading');
   clearTimeout(bubbleTimer);
 }
+
+// Click en bubble: fijar/desfijar
+document.getElementById('speech-bubble').addEventListener('click', function(e) {
+  if(e.target.id==='bubble-close') return;
+  this.classList.toggle('pinned');
+  if(this.classList.contains('pinned')) clearTimeout(bubbleTimer);
+});
+document.getElementById('bubble-close').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const b = document.getElementById('speech-bubble');
+  b.classList.remove('visible','pinned');
+});
 
 const spontaneous = {
   food:    ['Diez minutos mirando el mapa. ¿Perdidos ya?','El whisky antes del desayuno. Así se hace.','Aquí el café es un insulto. Pedid té.'],
