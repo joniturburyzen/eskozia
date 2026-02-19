@@ -12,7 +12,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 
 #speech-bubble {
   position: fixed; bottom: 130px; left: 10px; max-width: 260px;
-  background: white; color: #1a2b3d; padding: 12px 16px 12px 16px;
+  background: white; color: #1a2b3d; padding: 12px 16px;
   border-radius: 16px; border-bottom-left-radius: 4px;
   font-size: 0.82rem; line-height: 1.5; font-style: italic;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35); z-index: 900;
@@ -377,7 +377,6 @@ async function askGrok(msg, sys) {
 function showBubble(text, ms=6000) {
   const b = document.getElementById('speech-bubble');
   b.classList.remove('pinned');
-  // Preservar el botón de cierre
   document.getElementById('bubble-close').textContent = '✕';
   b.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); });
   b.insertAdjacentText('beforeend', text);
@@ -394,7 +393,6 @@ function showBubbleLoading() {
   clearTimeout(bubbleTimer);
 }
 
-// Click en bubble: fijar/desfijar
 document.getElementById('speech-bubble').addEventListener('click', function(e) {
   if(e.target.id==='bubble-close') return;
   this.classList.toggle('pinned');
@@ -508,39 +506,53 @@ document.querySelectorAll('.cat-btn').forEach(btn=>{
   });
 });
 
-function loadCategoryPlaces() {
+async function loadCategoryPlaces() {
   currentMarkers.forEach(m=>{ if(m.data&&m.data.type!=='distillery'&&m.data.type!=='custom') m.setMap(null); });
   currentMarkers=currentMarkers.filter(m=>m.data&&(m.data.type==='distillery'||m.data.type==='custom'));
   if(!userPosition) return;
-  const svc=new google.maps.places.PlacesService(map);
-  let req;
-  if(currentCategory==='food')    req={location:userPosition,radius:5000,type:['restaurant','bar','cafe']};
-  if(currentCategory==='culture') req={location:userPosition,radius:5000,type:['museum','art_gallery','church']};
-  if(currentCategory==='nature')  req={location:userPosition,radius:5000,keyword:'hiking trail viewpoint nature park'};
-  svc.nearbySearch(req,(results,status)=>{
-    if(status===google.maps.places.PlacesServiceStatus.OK) results.forEach(p=>addPlaceMarker(p));
-  });
+
+  const typeMap = {
+    food:    ['restaurant','bar','cafe'],
+    culture: ['museum','art_gallery','church'],
+    nature:  ['park','campground','natural_feature']
+  };
+
+  const { Place, SearchNearbyRankPreference } = await google.maps.importLibrary('places');
+  const center = new google.maps.LatLng(userPosition.lat, userPosition.lng);
+
+  const request = {
+    fields: ['id','displayName','location','rating','userRatingCount','formattedAddress','websiteURI','nationalPhoneNumber','regularOpeningHours','photos'],
+    locationRestriction: { center, radius: 5000 },
+    includedPrimaryTypes: typeMap[currentCategory],
+    maxResultCount: 20,
+    rankPreference: SearchNearbyRankPreference.POPULARITY,
+    language: 'es'
+  };
+
+  try {
+    const { places } = await Place.searchNearby(request);
+    places.forEach(p => addPlaceMarker(p));
+  } catch(e) { console.error('Places error:', e); }
 }
 
 function addPlaceMarker(place) {
   const colors={food:'red-dot',culture:'green-dot',nature:'blue-dot'};
+  const pos = place.location;
   const marker=new google.maps.Marker({
-    position:place.geometry.location, map,
+    position: pos, map,
     icon:{url:`http://maps.google.com/mapfiles/ms/icons/${colors[currentCategory]}.png`,scaledSize:new google.maps.Size(30,30)},
-    title:place.name, data:{...place,type:'place',category:currentCategory}
+    title: place.displayName, data:{...place, type:'place', category:currentCategory}
   });
   google.maps.event.addListener(marker,'mouseover',()=>{
-    let c=`<div style="font-family:Arial;padding:10px;min-width:160px"><h3 style="margin:0 0 4px">${place.name}</h3>`;
+    let c=`<div style="font-family:Arial;padding:10px;min-width:160px"><h3 style="margin:0 0 4px">${place.displayName}</h3>`;
     if(place.rating) c+=`<div style="color:#e87424">${'⭐'.repeat(Math.floor(place.rating))} ${place.rating}</div>`;
-    if(place.vicinity) c+=`<p style="font-size:0.8rem;margin-top:4px">${place.vicinity}</p>`;
+    if(place.formattedAddress) c+=`<p style="font-size:0.8rem;margin-top:4px">${place.formattedAddress}</p>`;
     infoWindow.setContent(c+'</div>'); infoWindow.open(map,marker);
   });
   google.maps.event.addListener(marker,'mouseout',()=>infoWindow.close());
   google.maps.event.addListener(marker,'click',()=>{
     clearTempCircle();
-    new google.maps.places.PlacesService(map).getDetails({placeId:place.place_id},(d,s)=>{
-      if(s===google.maps.places.PlacesServiceStatus.OK) showPlacePanel(d);
-    });
+    showPlacePanel(place);
   });
   currentMarkers.push(marker);
 }
@@ -560,27 +572,41 @@ function loadDistilleries() {
 }
 
 function showPlacePanel(place) {
-  document.getElementById('panel-name').textContent=place.name||'';
-  const rEl=document.getElementById('panel-rating');
-  rEl.innerHTML=place.rating?`${'⭐'.repeat(Math.floor(place.rating))}${'☆'.repeat(5-Math.floor(place.rating))} ${place.rating}/5 ${place.user_ratings_total?`(${place.user_ratings_total})`:''}` :'';
-  document.getElementById('panel-address').textContent=place.vicinity||place.formatted_address||'';
-  const ph=document.getElementById('panel-phone');
-  ph.innerHTML=place.international_phone_number?`📞 <a href="tel:${place.international_phone_number.replace(/\s/g,'')}">${place.international_phone_number}</a>`:'';
-  const w=document.getElementById('panel-website');
-  if(place.website){w.href=place.website;w.style.display='inline-block';}else w.style.display='none';
-  const h=document.getElementById('panel-hours');
-  h.innerHTML=place.opening_hours?.weekday_text?`<strong>Horario:</strong><br>${place.opening_hours.weekday_text.slice(0,3).join('<br>')}` :'';
-  const ph2=document.getElementById('panel-photo');
-  if(place.photos?.[0]){ph2.src=place.photos[0].getUrl({maxWidth:400,maxHeight:220});ph2.style.display='block';}else ph2.style.display='none';
-  const desc=document.getElementById('hamish-description');
+  // Compatibilidad nueva API (Place object) y antigua
+  const name    = place.displayName || place.name || '';
+  const rating  = place.rating;
+  const total   = place.userRatingCount || place.user_ratings_total;
+  const address = place.formattedAddress || place.vicinity || '';
+  const phone   = place.nationalPhoneNumber || place.international_phone_number || '';
+  const website = place.websiteURI || place.website || '';
+  const hours   = place.regularOpeningHours?.weekdayDescriptions || place.opening_hours?.weekday_text;
+  const photo   = place.photos?.[0];
+
+  document.getElementById('panel-name').textContent = name;
+  const rEl = document.getElementById('panel-rating');
+  rEl.innerHTML = rating ? `${'⭐'.repeat(Math.floor(rating))}${'☆'.repeat(5-Math.floor(rating))} ${rating}/5 ${total?`(${total})`:''}` : '';
+  document.getElementById('panel-address').textContent = address;
+  const ph = document.getElementById('panel-phone');
+  ph.innerHTML = phone ? `📞 <a href="tel:${phone.replace(/\s/g,'')}">${phone}</a>` : '';
+  const w = document.getElementById('panel-website');
+  if(website){ w.href=website; w.style.display='inline-block'; } else w.style.display='none';
+  const h = document.getElementById('panel-hours');
+  h.innerHTML = hours ? `<strong>Horario:</strong><br>${hours.slice(0,3).join('<br>')}` : '';
+  const ph2 = document.getElementById('panel-photo');
+  if(photo){
+    const url = typeof photo.getUrl==='function' ? photo.getUrl({maxWidth:400}) : (photo.authorAttributions?.[0]?.uri || '');
+    if(url){ ph2.src=url; ph2.style.display='block'; } else ph2.style.display='none';
+  } else ph2.style.display='none';
+
+  const desc = document.getElementById('hamish-description');
   desc.textContent='Hamish está pensando...'; desc.classList.add('loading');
-  const rInfo=place.rating?`Rating ${place.rating}/5 con ${place.user_ratings_total||'?'} reseñas`:'';
-  askGrok(`El viajero ha seleccionado "${place.name}" (${place.vicinity||''}). ${rInfo}. Descripción breve y útil con tu estilo. Máximo 3 frases.`)
-    .then(r=>{desc.textContent=r;desc.classList.remove('loading');});
-  selectedPlace=place;
+  const rInfo = rating ? `Rating ${rating}/5 con ${total||'?'} reseñas` : '';
+  askGrok(`El viajero ha seleccionado "${name}" (${address}). ${rInfo}. Descripción breve y útil con tu estilo. Máximo 3 frases.`)
+    .then(r=>{ desc.textContent=r; desc.classList.remove('loading'); });
+  selectedPlace = place;
   document.getElementById('panel-info').classList.remove('hidden');
-  if(!visitedPlaces.find(p=>p.name===place.name))
-    visitedPlaces.push({name:place.name,category:currentCategory,time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})});
+  if(!visitedPlaces.find(p=>p.name===name))
+    visitedPlaces.push({name, category:currentCategory, time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})});
 }
 
 function showDistilleryPanel(dist) {
@@ -755,6 +781,6 @@ function clearTempCircle() { if(tempCircle){tempCircle.setMap(null);tempCircle=n
 applyOutfit('food');
 </script>
 
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCE0XidfuLtjrNgNenKnpqq6lq1F0CTYUs&libraries=places,geometry&callback=initMap"></script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?v=beta&key=AIzaSyCE0XidfuLtjrNgNenKnpqq6lq1F0CTYUs&libraries=places,geometry&callback=initMap"></script>
 </body>
 </html>
