@@ -1,12 +1,12 @@
 /**
  * GLB Worker — carga con caché IndexedDB
- * Primera carga: descarga + guarda en IndexedDB
- * Cargas siguientes: lee de IndexedDB (instantáneo)
+ * Valida magic bytes antes de cachear o devolver datos
  */
 
 const DB_NAME    = 'glb-cache';
 const DB_VERSION = 1;
 const STORE      = 'files';
+const GLB_MAGIC  = 0x46546C67; // 'glTF' little-endian
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -27,11 +27,26 @@ function dbGet(db, key) {
 
 function dbPut(db, key, value) {
   return new Promise(resolve => {
-    const tx  = db.transaction(STORE, 'readwrite');
+    const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).put(value, key);
     tx.oncomplete = resolve;
-    tx.onerror    = resolve; // no bloquear si falla el cache
+    tx.onerror    = resolve;
   });
+}
+
+function dbDelete(db, key) {
+  return new Promise(resolve => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror    = resolve;
+  });
+}
+
+function isValidGLB(buffer) {
+  if (buffer.byteLength < 12) return false;
+  const magic = new DataView(buffer).getUint32(0, true);
+  return magic === GLB_MAGIC;
 }
 
 self.onmessage = async function({ data }) {
@@ -40,16 +55,28 @@ self.onmessage = async function({ data }) {
   try {
     const db = await openDB();
 
-    // ── Intento 1: leer de caché local ──────────────────────
+    // ── Intento 1: leer de caché ──────────────────────────
     const cached = await dbGet(db, cacheKey);
     if (cached) {
-      self.postMessage({ type: 'cached', buffer: cached }, [cached]);
-      return;
+      if (isValidGLB(cached)) {
+        self.postMessage({ type: 'cached', buffer: cached }, [cached]);
+        return;
+      }
+      // Caché corrupta — borrarla y continuar con fetch
+      await dbDelete(db, cacheKey);
     }
 
-    // ── Intento 2: descargar con progreso en streaming ───────
+    // ── Intento 2: descargar ──────────────────────────────
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} — ${url}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      throw new Error(`Respuesta HTML en lugar de GLB. Verifica que el archivo está en la ruta correcta: ${url}`);
+    }
 
     const total  = parseInt(response.headers.get('content-length') || '0');
     const reader = response.body.getReader();
@@ -64,19 +91,16 @@ self.onmessage = async function({ data }) {
       self.postMessage({ type: 'progress', loaded: received, total });
     }
 
-    // Combinar chunks en un solo ArrayBuffer
     const merged = new Uint8Array(received);
     let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
+    for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
+
+    if (!isValidGLB(merged.buffer)) {
+      throw new Error(`El archivo descargado no es un GLB válido. Comprueba la ruta: ${url}`);
     }
 
-    // Guardar en IndexedDB (copia, para poder transferir el original)
-    const toCache = merged.buffer.slice(0);
-    dbPut(db, cacheKey, toCache); // async, no esperamos
-
-    // Transferir al hilo principal (zero-copy)
+    // Cachear y transferir
+    dbPut(db, cacheKey, merged.buffer.slice(0));
     self.postMessage({ type: 'done', buffer: merged.buffer }, [merged.buffer]);
 
   } catch (err) {
