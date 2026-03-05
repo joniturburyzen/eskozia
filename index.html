@@ -107,6 +107,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  RENDERER
@@ -211,6 +212,7 @@ window.addEventListener('resize', () => {
 //  FASE 1: ALIEN primero (1.2 MB — rápido)
 // ═══════════════════════════════════════════════════════════════
 const gltfLoader = new GLTFLoader();
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
 const splashFill = document.getElementById('splash-fill');
 const splashTxt  = document.getElementById('splash-txt');
@@ -255,7 +257,7 @@ gltfLoader.load(
 );
 
 // ═══════════════════════════════════════════════════════════════
-//  FASE 2: HOUSEHOLD en Web Worker (93 MB — background)
+//  FASE 2: HOUSEHOLD en Web Worker + caché IndexedDB (52 MB)
 // ═══════════════════════════════════════════════════════════════
 function loadHouseholdInWorker() {
   const houseBarEl   = document.getElementById('house-bar');
@@ -263,131 +265,100 @@ function loadHouseholdInWorker() {
   const houseBarPct  = document.getElementById('house-bar-pct');
   houseBarEl.style.display = 'block';
 
-  // Código del worker inline (Blob URL)
-  const workerSrc = `
-    self.onmessage = function(e) {
-      const url = e.data;
-      fetch(url)
-        .then(function(r) {
-          var total = parseInt(r.headers.get('content-length') || '0');
-          var reader = r.body.getReader();
-          var chunks = [];
-          var received = 0;
-          function read() {
-            return reader.read().then(function(ref) {
-              var done = ref.done, value = ref.value;
-              if (done) {
-                var buf = new Uint8Array(received);
-                var offset = 0;
-                for (var i = 0; i < chunks.length; i++) {
-                  buf.set(chunks[i], offset);
-                  offset += chunks[i].length;
-                }
-                self.postMessage({ type: 'done', buffer: buf.buffer }, [buf.buffer]);
-                return;
-              }
-              chunks.push(value);
-              received += value.length;
-              self.postMessage({ type: 'progress', loaded: received, total: total });
-              return read();
-            });
-          }
-          return read();
-        })
-        .catch(function(err) {
-          self.postMessage({ type: 'error', msg: err.message });
-        });
-    };
-  `;
-  const blob      = new Blob([workerSrc], { type: 'application/javascript' });
-  const workerURL = URL.createObjectURL(blob);
-  const worker    = new Worker(workerURL);
+  const worker = new Worker('glb-worker.js');
 
-  // URL absoluta para que el worker pueda hacer fetch
-  const houseURL = new URL('household/source/household.glb', location.href).href;
-  worker.postMessage(houseURL);
+  const houseURL  = new URL('household/source/household_final.glb', location.href).href;
+  const cacheKey  = 'household_final_v1';
+  worker.postMessage({ url: houseURL, cacheKey });
 
   worker.onmessage = e => {
     const { type, loaded, total, buffer, msg } = e.data;
 
+    if (type === 'cached') {
+      // Viene de IndexedDB — cargar directamente sin barra de progreso
+      houseBarEl.querySelector('#house-bar-label').innerText = 'Casa en caché…';
+      houseBarFill.style.width = '100%';
+      houseBarPct.innerText = 'Instantáneo';
+      processHouseholdBuffer(buffer);
+      return;
+    }
+
     if (type === 'progress') {
       const pct = total > 0 ? (loaded / total) * 100 : 0;
       houseBarFill.style.width = pct.toFixed(1) + '%';
-      const mb = (loaded / 1048576).toFixed(1);
+      const mb   = (loaded   / 1048576).toFixed(1);
       const tbMb = total > 0 ? (total / 1048576).toFixed(1) : '?';
       houseBarPct.innerText = `${mb} / ${tbMb} MB`;
     }
 
     if (type === 'done') {
       worker.terminate();
-      URL.revokeObjectURL(workerURL);
-
-      // Parsear el ArrayBuffer en el hilo principal
-      const resourcePath = new URL('household/source/', location.href).href;
-      gltfLoader.parse(buffer, resourcePath,
-        gltf => {
-          const root = gltf.scene;
-
-          // Auto-fit a ~30 unidades
-          const box    = new THREE.Box3().setFromObject(root);
-          const size   = box.getSize(new THREE.Vector3());
-          const scale  = 30 / Math.max(size.x, size.y, size.z);
-          root.scale.setScalar(scale);
-
-          const box2   = new THREE.Box3().setFromObject(root);
-          const center = box2.getCenter(new THREE.Vector3());
-          root.position.set(-center.x, -box2.min.y, -center.z);
-
-          const size2 = box2.getSize(new THREE.Vector3());
-          bounds = {
-            minX: -size2.x * 0.44,  maxX: size2.x * 0.44,
-            minZ: -size2.z * 0.44,  maxZ: size2.z * 0.44,
-          };
-
-          // Fade in suave de la casa
-          root.traverse(c => {
-            if (c.isMesh) {
-              c.castShadow = true;
-              c.receiveShadow = true;
-              if (c.material) {
-                c.material = c.material.clone();
-                c.material.transparent = true;
-                c.material.opacity = 0;
-              }
-            }
-          });
-          scene.add(root);
-
-          // Animar opacity 0→1 y quitar floor temporal
-          let t = 0;
-          const fadeIn = setInterval(() => {
-            t += 0.04;
-            const op = Math.min(1, t);
-            root.traverse(c => {
-              if (c.isMesh && c.material) c.material.opacity = op;
-            });
-            if (t >= 1) {
-              clearInterval(fadeIn);
-              root.traverse(c => {
-                if (c.isMesh && c.material) c.material.transparent = false;
-              });
-              scene.remove(tempFloor);
-            }
-          }, 16);
-
-          // Ocultar mini barra
-          houseBarEl.style.opacity = '0';
-          setTimeout(() => { houseBarEl.style.display = 'none'; }, 500);
-        },
-        err => console.error('[household parse]', err)
-      );
+      processHouseholdBuffer(buffer);
     }
 
     if (type === 'error') {
       console.error('[household worker]', msg);
-      houseBarPct.innerText = 'Error al cargar';
+      houseBarEl.querySelector('#house-bar-label').innerText = 'Error';
+      houseBarFill.style.background = '#f55';
+      houseBarPct.innerText = msg;
     }
   };
+
+  function processHouseholdBuffer(buffer) {
+    const resourcePath = new URL('household/source/', location.href).href;
+    gltfLoader.parse(buffer, resourcePath,
+      gltf => {
+        const root = gltf.scene;
+
+        // Auto-fit a ~30 unidades
+        const box   = new THREE.Box3().setFromObject(root);
+        const size  = box.getSize(new THREE.Vector3());
+        root.scale.setScalar(30 / Math.max(size.x, size.y, size.z));
+
+        const box2   = new THREE.Box3().setFromObject(root);
+        const center = box2.getCenter(new THREE.Vector3());
+        root.position.set(-center.x, -box2.min.y, -center.z);
+
+        const size2 = box2.getSize(new THREE.Vector3());
+        bounds = {
+          minX: -size2.x * 0.44, maxX: size2.x * 0.44,
+          minZ: -size2.z * 0.44, maxZ: size2.z * 0.44,
+        };
+
+        // Fade in suave
+        root.traverse(c => {
+          if (c.isMesh) {
+            c.castShadow = true; c.receiveShadow = true;
+            if (c.material) {
+              c.material = c.material.clone();
+              c.material.transparent = true;
+              c.material.opacity = 0;
+            }
+          }
+        });
+        scene.add(root);
+
+        let t = 0;
+        const fadeIn = setInterval(() => {
+          t += 0.04;
+          root.traverse(c => {
+            if (c.isMesh && c.material) c.material.opacity = Math.min(1, t);
+          });
+          if (t >= 1) {
+            clearInterval(fadeIn);
+            root.traverse(c => {
+              if (c.isMesh && c.material) c.material.transparent = false;
+            });
+            scene.remove(tempFloor);
+          }
+        }, 16);
+
+        houseBarEl.style.opacity = '0';
+        setTimeout(() => { houseBarEl.style.display = 'none'; }, 500);
+      },
+      err => console.error('[household parse]', err)
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
